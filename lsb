@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import numpy as np
+from PIL import Image
+
+channel_name_map = {
+    'R': 'red',
+    'G': 'green',
+    'B': 'blue',
+    'A': 'alpha',
+}
+
+def extract_bitplanes(img_array):
+    planes_per_channel = []
+    for i in range(img_array.shape[2]):
+        ch_data = img_array[:, :, i]
+        planes = [((ch_data >> b) & 1) * 255 for b in range(8)]
+        planes_per_channel.append(planes)
+    return planes_per_channel
+
+def save_planes(planes_per_channel, out_dir, channel_names):
+    os.makedirs(out_dir, exist_ok=True)
+    for ch_idx, planes in enumerate(planes_per_channel):
+        ch = channel_name_map[channel_names[ch_idx]]
+        for b, plane in enumerate(planes):
+            img = Image.fromarray(plane.astype('uint8'))
+            img.save(os.path.join(out_dir, f'{ch}_bit_{b}.png'))
+
+def save_planes_concatenated(planes_per_channel, out_file):
+    rows = []
+    for planes in planes_per_channel:
+        row = np.hstack([plane.astype('uint8') for plane in planes])
+        rows.append(row)
+        concatenated = np.vstack(rows)
+        img = Image.fromarray(concatenated)
+        img.save(out_file)
+
+def main():
+    parser = argparse.ArgumentParser(description='Extract bit planes from an image.')
+    parser.add_argument('image', help='Input image file')
+    parser.add_argument('-o', '--output', help='Output directory (default: output_<image_name>)')
+    parser.add_argument('-a', '--all', action='store_true', help='Output a single concatenated image')
+    args = parser.parse_args()
+
+    image_path = args.image
+    image_name = os.path.splitext(os.path.basename(image_path))[0]
+    output = args.output or f'output_{image_name}'
+
+    img = Image.open(image_path)
+    img_array = np.array(img)
+
+    if img_array.shape[2] == 1:
+        # black/white image
+        channel_names = ['L']
+        img_array = img_array[:, :, np.newaxis]
+    else:
+        channel_names = list(img.mode)
+
+    planes_per_channel = extract_bitplanes(img_array)
+
+    if args.all:
+        if not output.endswith('.png'):
+            output += '.png'
+        save_planes_concatenated(planes_per_channel, output)
+    else:
+        save_planes(planes_per_channel, output, channel_names)
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+import argparse
+import sys
+import os
+
+def rot(input_file, output_file, n: int = 13):
+    shift = n % 26
+    while True:
+        chunk = input_file.read(1)
+        if not chunk:
+            break
+        c = chunk[0]
+        if 97 <= c <= 122:
+            char = (c - 97 + shift) % 26 + 97
+        elif 65 <= c <= 90:
+            char = (c - 65 + shift) % 26 + 65
+        else:
+            char = c
+        output_file.write(bytes([char]))
+
+def die(msg):
+    print(f'error: {msg}', file=sys.stderr)
+    sys.exit(1)
+
+def try_int(s):
+    try:
+        return int(s)
+    except ValueError:
+        die(f'{s!r} is not an integer')
+
+def escape_and_truncate(data: bytes, max_len: int = 80) -> str:
+    s = repr(data)[2:-1]
+    if len(s) > max_len:
+        s = s[:max_len - 3] + '...'
+    return s
+
+def main():
+    parser = argparse.ArgumentParser(description='rot encoder/decoder')
+    parser.add_argument('-o', '--output', type=str, help='Path to output file')
+    parser.add_argument('-a', '--all', action='store_true', help='Output all 26 possible rotations')
+
+    args, unknown_args = parser.parse_known_args()
+
+    n = 13
+    input_file = None
+
+    pos_args = []
+    for arg in unknown_args:
+        if arg.startswith('-'):
+            if arg[1:].isdigit():
+                pos_args.append(arg)
+            else:
+                die(f'unknown option {arg}')
+        else:
+            pos_args.append(arg)
+
+    if len(pos_args) == 1:
+        arg = pos_args[0]
+        if os.path.exists(arg) and os.path.isfile(arg):
+            input_file = arg
+        else:
+            n = try_int(arg)
+    elif len(pos_args) == 2:
+        arg1, arg2 = pos_args
+        n = try_int(arg1)
+        input_file = arg2
+    elif len(pos_args) > 2:
+        parser.print_help()
+        sys.exit(1)
+
+    try:
+        if input_file:
+            if not os.path.exists(input_file):
+                die(f'input file {input_file!r} does not exist')
+            with open(input_file, 'rb') as f:
+                input_data = f.read()
+        else:
+            input_data = sys.stdin.buffer.read()
+
+        if args.all:
+            for i in range(1, 27):
+                shift = i % 26
+                result = bytearray()
+                for c in input_data:
+                    if 97 <= c <= 122:
+                        result.append((c - 97 + shift) % 26 + 97)
+                    elif 65 <= c <= 90:
+                        result.append((c - 65 + shift) % 26 + 65)
+                    else:
+                        result.append(c)
+                rotated = bytes(result)
+                escaped = escape_and_truncate(rotated)
+                print(f'\033[1;1mrot {i}:\033[0m \033[32;1m"{escaped}"\033[0m')
+        else:
+            from io import BytesIO
+            input_stream = BytesIO(input_data)
+            if args.output:
+                with open(args.output, 'wb') as fout:
+                    rot(input_stream, fout, n)
+            else:
+                rot(input_stream, sys.stdout.buffer, n)
+    except Exception as e:
+        die(e)
+
+if __name__ == '__main__':
+    main()

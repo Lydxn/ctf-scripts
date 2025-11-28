@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# --- Usage Function ---
+usage() {
+    echo "Usage: $0 <width> <height> <format>"
+    echo "  <width>: The width of the image in pixels (e.g., 800)"
+    echo "  <height>: The height of the image in pixels (e.g., 600)"
+    echo "  <format>: The desired output format (must be 'jpg' or 'png')"
+    echo ""
+    echo "Example: $0 1024 768 png"
+    exit 1
+}
+
+# --- Input Validation ---
+if [ "$#" -ne 3 ]; then
+    usage
+fi
+
+WIDTH=$1
+HEIGHT=$2
+FORMAT=$(echo "$3" | tr '[:upper:]' '[:lower:]') # Convert format to lowercase
+
+# Check if width and height are positive integers
+if ! [[ "$WIDTH" =~ ^[0-9]+$ && "$WIDTH" -gt 0 && "$HEIGHT" =~ ^[0-9]+$ && "$HEIGHT" -gt 0 ]]; then
+    echo "Error: Width and height must be positive integers."
+    exit 1
+fi
+
+# Check if the format is supported
+if [ "$FORMAT" != "jpg" ] && [ "$FORMAT" != "png" ]; then
+    echo "Error: Unsupported format '$3'. Please use 'jpg' or 'png'."
+    exit 1
+fi
+
+# --- Image Generation ---
+
+OUTPUT_FILENAME="black_${WIDTH}x${HEIGHT}.$FORMAT"
+SIZE="${WIDTH}x${HEIGHT}"
+
+echo "Generating solid black image: $OUTPUT_FILENAME (Size: $SIZE)"
+
+# Use ImageMagick's 'convert' command
+# 'xc:black' is a built-in ImageMagick image source for a solid black canvas
+convert -size "$SIZE" xc:black "$OUTPUT_FILENAME"
+
+# --- Output Confirmation ---
+if [ -f "$OUTPUT_FILENAME" ]; then
+    echo "✅ Success! File created: $OUTPUT_FILENAME"
+else
+    echo "❌ Error: Image generation failed."
+fi
