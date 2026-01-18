@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+import argparse
+import getpass
+import json
+import requests
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
+
+
+def get_user_config_path():
+    return Path.home() / '.config' / 'dh' / 'login.json'
+
+
+def create_user_config():
+    print('[*] Dreamhack login not found. Creating one...')
+    email = input('Email: ')
+    password = getpass.getpass('Password: ')
+
+    config_path = get_user_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {'email': email, 'password': password}
+    config_path.write_text(json.dumps(data))
+
+    print(f'[+] Config written to {config_path}')
+
+
+class User:
+    api_endpoint = 'https://dreamhack.io/api/v1'
+
+    def __init__(self, email, password):
+        self.sess = requests.Session()
+        self._auth_login(email, password)
+
+    @staticmethod
+    def from_config():
+        config_path = get_user_config_path()
+        if not config_path.exists():
+            raise FileNotFoundError(f'config not found: {config_path}')
+
+        data = json.loads(config_path.read_text())
+        if 'email' not in data or 'password' not in data:
+            raise ValueError('config is missing required field(s)')
+
+        return User(**data)
+
+    def download_challenge(self, num):
+        self.sess.headers['X-Csrftoken'] = self.sess.cookies['csrf_token']
+        r = self.sess.post(f'{self.api_endpoint}/wargame/challenges/{num}/download/')
+        r.raise_for_status()
+
+        download_url = r.json()
+        r = self.sess.get(download_url, stream=True)
+        r.raise_for_status()
+
+        with tempfile.TemporaryFile() as tmp:
+            shutil.copyfileobj(r.raw, tmp)
+            tmp.seek(0)
+
+            with zipfile.ZipFile(tmp) as archive:
+                out_dir = Path.cwd() / str(num)
+                out_dir.mkdir()
+                archive.extractall(out_dir)
+
+    def _auth_login(self, email, password):
+        data = {'email': email, 'password': password}
+        r = self.sess.post(f'{self.api_endpoint}/auth/login/', json=data)
+        r.raise_for_status()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='dreamhack download cli')
+    parser.add_argument('num')
+    args = parser.parse_args()
+
+    config_path = get_user_config_path()
+    if not config_path.exists():
+        create_user_config()
+
+    user = User.from_config()
+    user.download_challenge(args.num)
+
+
+if __name__ == '__main__':
+    main()
